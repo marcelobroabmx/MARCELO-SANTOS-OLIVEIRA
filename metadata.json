@@ -1,0 +1,8 @@
+{
+  "name": "Gerador de imagens e vídeos viral para TikTok Shop",
+  "description": "Uma plataforma profissional completa para criação de conteúdo viral, utilizando IA para voz em tempo real, pesquisa fundamentada, geração de imagens e vídeos cinematográficos (Veo) e síntese de voz de alta fidelidade.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
