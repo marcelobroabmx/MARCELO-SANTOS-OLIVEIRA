@@ -88,8 +88,9 @@ export class GeminiService {
       },
     });
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
+    const parts = response.candidates?.[0]?.content?.parts || [];
+    for (const part of parts) {
+      if (part.inlineData?.data) {
         return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
@@ -109,19 +110,25 @@ export class GeminiService {
             }
           },
           {
-            text: `Analise esta mídia (imagem ou vídeo) e crie um PROMPT para geração de vídeo de 8 segundos no TikTok Shop.
-            
-            REGRAS OBRIGATÓRIAS:
-            1. O prompt deve ser escrito inteiramente em PORTUGUÊS BRASILEIRO NATIVO.
-            2. Deve conter a NARRAÇÃO COMPLETA (as falas) que o personagem ou narrador dirá no vídeo.
-            3. ESTRUTURA DO VÍDEO (8 segundos):
-               - GANCHO VIRAL (0-3s): Uma fala impactante que prenda a atenção imediatamente.
-               - HISTÓRIA RÁPIDA: Uma mini narrativa mostrando o uso prático ou desejo pelo produto.
-               - ESCASSEZ: Uma frase enfática dizendo que o estoque está acabando ou é a última chance.
-               - CALL TO ACTION (CTA): Comando final para clicar no carrinho ou comprar agora.
-            4. FOCO VISUAL: Descreva a cena cinematográfica, iluminação de estúdio, ultra-realismo, sem textos na tela (foco na ação e narração).
-            
-            Retorne um prompt descritivo que inclua: "Cena: [Descrição visual] | Narração: [Texto completo da fala em PT-BR]".`
+            text: `Analise esta mídia e crie uma proposta original de prompt e roteiro focado em conversão para TikTok Shop.
+
+REGRAS DE OURO (PROTEÇÃO E QUALIDADE):
+1. EVITAR DIREITOS AUTORAIS: Se houver pessoas, crie uma versão similar mas única. Modifique levemente o modelo para ser original. 
+2. FALA NATURAL E ÚNICA: O roteiro deve ser inédito, modificando o tom e as palavras da fala original, mas mantendo a estrutura de conversão (Gancho, Escassez, Narração, CTA).
+3. FIDELIDADE AO PRODUTO: O produto deve ser uma réplica 1:1, sem alterações de tamanho, cor ou especificações.
+4. QUALIDADE TÉCNICA EXTREMA: O prompt deve instruir explicitamente o modelo de vídeo a remover todos os bugs visuais, garantir movimentos suaves e uma fala ultra-natural.
+
+ESTRUTURA EM PORTUGUÊS BRASILEIRO NATIVO:
+- GANCHO VIRAL (0-3s): Fala impactante inédita.
+- NARRATIVA UGC: Uso prático do produto com realismo.
+- ESCASSEZ: Gatilho mental de estoque acabando.
+- CTA: Chamada clara para o carrinho.
+
+SAÍDA OBRIGATÓRIA (MANTENHA ESTA INTRODUÇÃO):
+"Aqui está uma proposta original de prompt e roteiro focado em conversão para TikTok Shop, mantendo a fidelidade ao produto e evitando direitos autorais:
+
+PROMPT VISUAL: [Descreva a cena cinematográfica, movimentos suaves, sem bugs, sem membros duplicados, modelo similar original, produto 1:1]
+ROTEIRO DE NARRAÇÃO: [Texto completo das falas em Português Brasileiro nativo com fala natural e fluida]."`
           }
         ]
       }
@@ -130,7 +137,7 @@ export class GeminiService {
   }
 
   static async generateVideo(prompt: string, model: 'veo-3.1-fast-generate-preview' | 'veo-3.1-generate-preview' = 'veo-3.1-fast-generate-preview', aspectRatio: '16:9' | '9:16' = '16:9') {
-    const ai = this.getAi();
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     let operation = await ai.models.generateVideos({
       model: model,
       prompt: prompt,
@@ -147,7 +154,11 @@ export class GeminiService {
     }
 
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+    if (!downloadLink) throw new Error("Link de download do vídeo não encontrado.");
+    
     const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+    if (!response.ok) throw new Error("Erro ao baixar o vídeo gerado.");
+    
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   }

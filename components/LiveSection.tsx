@@ -18,20 +18,23 @@ const LiveSection: React.FC = () => {
 
   const stopSession = useCallback(() => {
     if (sessionRef.current) {
-      sessionRef.current.close();
+      try { sessionRef.current.close(); } catch(e) {}
       sessionRef.current = null;
     }
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
     if (outputAudioContextRef.current) {
-      outputAudioContextRef.current.close();
+      outputAudioContextRef.current.close().catch(() => {});
       outputAudioContextRef.current = null;
     }
-    sourcesRef.current.forEach(s => s.stop());
+    sourcesRef.current.forEach(s => {
+      try { s.stop(); } catch(e) {}
+    });
     sourcesRef.current.clear();
     setIsActive(false);
+    setIsConnecting(false);
   }, []);
 
   const startSession = async () => {
@@ -66,15 +69,18 @@ const LiveSection: React.FC = () => {
                 mimeType: 'audio/pcm;rate=16000',
               };
               sessionPromise.then(session => {
-                session.sendRealtimeInput({ media: pcmBlob });
-              });
+                if (session) session.sendRealtimeInput({ media: pcmBlob });
+              }).catch(() => {});
             };
             
             source.connect(processor);
             processor.connect(inCtx.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            const audioBase64 = message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
+            // Correção: Uso de optional chaining seguro para evitar 'Cannot read properties of undefined'
+            const parts = message.serverContent?.modelTurn?.parts;
+            const audioBase64 = parts?.[0]?.inlineData?.data;
+
             if (audioBase64) {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outCtx.currentTime);
               const buffer = await decodeAudioData(decode(audioBase64), outCtx, 24000, 1);
@@ -88,25 +94,29 @@ const LiveSection: React.FC = () => {
             }
 
             if (message.serverContent?.inputTranscription) {
-              inputTranscriptionRef.current += message.serverContent.inputTranscription.text;
+              inputTranscriptionRef.current += message.serverContent.inputTranscription.text || '';
             } else if (message.serverContent?.outputTranscription) {
-              outputTranscriptionRef.current += message.serverContent.outputTranscription.text;
+              outputTranscriptionRef.current += message.serverContent.outputTranscription.text || '';
             }
 
             if (message.serverContent?.turnComplete) {
               const userText = inputTranscriptionRef.current;
               const modelText = outputTranscriptionRef.current;
-              setTranscriptions(prev => [
-                ...prev, 
-                { role: 'user', text: userText },
-                { role: 'model', text: modelText }
-              ]);
+              if (userText || modelText) {
+                setTranscriptions(prev => [
+                  ...prev, 
+                  { role: 'user', text: userText || '...' },
+                  { role: 'model', text: modelText || '...' }
+                ]);
+              }
               inputTranscriptionRef.current = '';
               outputTranscriptionRef.current = '';
             }
 
             if (message.serverContent?.interrupted) {
-              sourcesRef.current.forEach(s => s.stop());
+              sourcesRef.current.forEach(s => {
+                try { s.stop(); } catch(e) {}
+              });
               sourcesRef.current.clear();
               nextStartTimeRef.current = 0;
             }
@@ -135,7 +145,7 @@ const LiveSection: React.FC = () => {
     } catch (err) {
       console.error(err);
       setIsConnecting(false);
-      alert("Não foi possível iniciar a sessão. Certifique-se de que o acesso ao microfone foi concedido.");
+      alert("Erro na conexão Live. Verifique sua chave API ou se o modelo está disponível em sua região.");
     }
   };
 
@@ -153,7 +163,10 @@ const LiveSection: React.FC = () => {
       <div className="flex-1 glass rounded-3xl p-8 relative overflow-hidden flex flex-col items-center justify-center">
         {isActive ? (
           <div className="w-full h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto space-y-4 px-4 mb-6">
+            <div className="flex-1 overflow-y-auto space-y-4 px-4 mb-6 custom-scrollbar">
+              {transcriptions.length === 0 && (
+                <div className="text-center text-slate-500 italic mt-10">Aguardando fala...</div>
+              )}
               {transcriptions.map((t, idx) => (
                 <div key={idx} className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`px-4 py-2 rounded-2xl text-sm ${t.role === 'user' ? 'bg-indigo-600/30 text-indigo-200' : 'bg-slate-800 text-slate-300'}`}>
@@ -167,7 +180,7 @@ const LiveSection: React.FC = () => {
               <div className="flex items-center gap-1 h-12 mb-4">
                 {[...Array(12)].map((_, i) => (
                   <div key={i} className="w-1.5 bg-indigo-500 rounded-full animate-pulse" 
-                       style={{ height: `${Math.random() * 100}%`, animationDelay: `${i * 100}ms` }} />
+                       style={{ height: `${Math.random() * 80 + 20}%`, animationDelay: `${i * 100}ms` }} />
                 ))}
               </div>
               <button 
@@ -196,7 +209,7 @@ const LiveSection: React.FC = () => {
             
             <div className="text-xs text-slate-500 flex items-center gap-2">
               <i className="fa-solid fa-shield-halved"></i>
-              Conexão criptografada • IA de áudio nativa
+              Conexão segura • Latência ultra-baixa
             </div>
           </div>
         )}
