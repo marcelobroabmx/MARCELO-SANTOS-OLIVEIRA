@@ -99,9 +99,10 @@ export class GeminiService {
 
   static async analyzeMediaForVideo(base64Data: string, mimeType: string) {
     const ai = this.getAi();
+    // Usando gemini-2.5-flash para análise multimodal (imagens/vídeos) mais estável
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: {
+      model: 'gemini-2.5-flash-latest',
+      contents: [{
         parts: [
           {
             inlineData: {
@@ -116,7 +117,7 @@ REGRAS DE OURO (PROTEÇÃO E QUALIDADE):
 1. EVITAR DIREITOS AUTORAIS: Se houver pessoas, crie uma versão similar mas única. Modifique levemente o modelo para ser original. 
 2. FALA NATURAL E ÚNICA: O roteiro deve ser inédito, modificando o tom e as palavras da fala original, mas mantendo a estrutura de conversão (Gancho, Escassez, Narração, CTA).
 3. FIDELIDADE AO PRODUTO: O produto deve ser uma réplica 1:1, sem alterações de tamanho, cor ou especificações.
-4. QUALIDADE TÉCNICA EXTREMA: O prompt deve instruir explicitamente o modelo de vídeo a remover todos os bugs visuais, garantir movimentos suaves e uma fala ultra-natural.
+4. QUALIDADE TÉCNICA EXTREMA: Instrua o modelo a remover todos os bugs visuais, garantir movimentos suaves e uma fala ultra-natural.
 
 ESTRUTURA EM PORTUGUÊS BRASILEIRO NATIVO:
 - GANCHO VIRAL (0-3s): Fala impactante inédita.
@@ -131,8 +132,13 @@ PROMPT VISUAL: [Descreva a cena cinematográfica, movimentos suaves, sem bugs, s
 ROTEIRO DE NARRAÇÃO: [Texto completo das falas em Português Brasileiro nativo com fala natural e fluida]."`
           }
         ]
-      }
+      }]
     });
+    
+    if (!response.candidates?.[0]) {
+      throw new Error("Não foi possível obter uma resposta do modelo para esta mídia.");
+    }
+    
     return response.text || "";
   }
 
@@ -157,7 +163,11 @@ ROTEIRO DE NARRAÇÃO: [Texto completo das falas em Português Brasileiro nativo
     if (!downloadLink) throw new Error("Link de download do vídeo não encontrado.");
     
     const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-    if (!response.ok) throw new Error("Erro ao baixar o vídeo gerado.");
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Erro no download do vídeo:", errorText);
+      throw new Error("Erro ao baixar o vídeo gerado: " + response.statusText);
+    }
     
     const blob = await response.blob();
     return URL.createObjectURL(blob);

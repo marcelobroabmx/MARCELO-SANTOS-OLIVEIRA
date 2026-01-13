@@ -7,6 +7,7 @@ const LiveSection: React.FC = () => {
   const [isActive, setIsActive] = useState(false);
   const [transcriptions, setTranscriptions] = useState<{role: 'user'|'model', text: string}[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -39,6 +40,7 @@ const LiveSection: React.FC = () => {
 
   const startSession = async () => {
     setIsConnecting(true);
+    setErrorStatus(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -77,20 +79,23 @@ const LiveSection: React.FC = () => {
             processor.connect(inCtx.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Correção: Uso de optional chaining seguro para evitar 'Cannot read properties of undefined'
             const parts = message.serverContent?.modelTurn?.parts;
             const audioBase64 = parts?.[0]?.inlineData?.data;
 
             if (audioBase64) {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outCtx.currentTime);
-              const buffer = await decodeAudioData(decode(audioBase64), outCtx, 24000, 1);
-              const source = outCtx.createBufferSource();
-              source.buffer = buffer;
-              source.connect(outCtx.destination);
-              source.addEventListener('ended', () => sourcesRef.current.delete(source));
-              source.start(nextStartTimeRef.current);
-              nextStartTimeRef.current += buffer.duration;
-              sourcesRef.current.add(source);
+              try {
+                const buffer = await decodeAudioData(decode(audioBase64), outCtx, 24000, 1);
+                const source = outCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(outCtx.destination);
+                source.addEventListener('ended', () => sourcesRef.current.delete(source));
+                source.start(nextStartTimeRef.current);
+                nextStartTimeRef.current += buffer.duration;
+                sourcesRef.current.add(source);
+              } catch (e) {
+                console.error("Erro ao processar áudio de saída:", e);
+              }
             }
 
             if (message.serverContent?.inputTranscription) {
@@ -122,7 +127,8 @@ const LiveSection: React.FC = () => {
             }
           },
           onerror: (e) => {
-            console.error("Erro Live", e);
+            console.error("Erro Live API:", e);
+            setErrorStatus("Erro na conexão em tempo real.");
             stopSession();
           },
           onclose: () => {
@@ -136,16 +142,16 @@ const LiveSection: React.FC = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
           },
-          systemInstruction: "Você é um companheiro amigável. Fale naturalmente, seja prestativo e mantenha uma conversa leve em Português Brasileiro."
+          systemInstruction: "Você é um companheiro amigável. Fale naturalmente e seja prestativo em Português Brasileiro."
         }
       });
 
       sessionRef.current = await sessionPromise;
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setIsConnecting(false);
-      alert("Erro na conexão Live. Verifique sua chave API ou se o modelo está disponível em sua região.");
+      setErrorStatus("Falha de rede ao conectar. Verifique sua chave API.");
     }
   };
 
@@ -156,9 +162,16 @@ const LiveSection: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto h-full flex flex-col py-10 px-6">
       <div className="text-center mb-10">
-        <h2 className="text-3xl font-bold gemini-text-gradient mb-4">Conversa por Voz em Tempo Real</h2>
-        <p className="text-slate-400">Experimente interações humanas ultra-rápidas e naturais.</p>
+        <h2 className="text-3xl font-bold gemini-text-gradient mb-4">Voz em Tempo Real</h2>
+        <p className="text-slate-400">Interações naturais com latência ultra-baixa.</p>
       </div>
+
+      {errorStatus && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-4 text-red-400 text-sm font-bold">
+          <i className="fa-solid fa-circle-exclamation"></i>
+          <span>{errorStatus}</span>
+        </div>
+      )}
 
       <div className="flex-1 glass rounded-3xl p-8 relative overflow-hidden flex flex-col items-center justify-center">
         {isActive ? (
@@ -206,11 +219,6 @@ const LiveSection: React.FC = () => {
             >
               {isConnecting ? "Estabelecendo Conexão..." : "Iniciar Voz em Tempo Real"}
             </button>
-            
-            <div className="text-xs text-slate-500 flex items-center gap-2">
-              <i className="fa-solid fa-shield-halved"></i>
-              Conexão segura • Latência ultra-baixa
-            </div>
           </div>
         )}
       </div>
